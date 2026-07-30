@@ -5,6 +5,19 @@
 
 ---
 
+## 사용 API (필요한 API 키)
+
+- Google AI Studio: aistudio.google.com
+- KOSIS: kosis.kr
+- 공공데이터포털: data.go.kr
+- 한국은행 Open API 서비스(ECOS): ecos.bok.or.kr
+- 전력데이터 개방 포털시스템: bigdata.kepco.co.kr
+- 기상청 API허브: apihub.kma.go.kr
+
+- Yahoo Finance: finance.yahoo.com (Key X)
+
+---
+
 ### 프로젝트 클론
 
 ```bash
@@ -40,3 +53,5 @@ pip install -r requirements.txt
 ```bash
 streamlit run src/app/app.py
 ```
+
+---
