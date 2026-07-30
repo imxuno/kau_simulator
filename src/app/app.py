@@ -214,7 +214,7 @@ with st.sidebar:
             "가격 예측 시뮬레이터",
             # "사업장 · 배출량 관리",
             # "시장 수급 전망",
-            # "리포트 자동 생성",
+            "리포트 자동 생성",
         ],
         label_visibility="collapsed",
     )
@@ -1962,3 +1962,68 @@ with main_col:
     #             except Exception as e:
     #                 st.error(f"LLM 호출 실패: {str(e)}")
     # !SECTION - LLM 브리핑 테스트
+
+    # ---------------------------------------------------------
+    # SECTION - 리포트 자동 생성
+    # ---------------------------------------------------------
+    elif "리포트 자동 생성" in selected_tab:
+        st.subheader("월간 배출권 매매계획 리포트")
+        st.markdown(
+            "현재 모델 예측치와 시장 데이터를 바탕으로 보고서를 자동 생성합니다."
+        )
+
+        # Prepare context data
+        context_data = {
+            "current_date": test_end,
+            "current_price": float(current_price),
+            "predicted_price": float(
+                current_price * (1 + getattr(st.session_state, "latest_return", 0))
+            ),
+            "predicted_return_pct": float(
+                getattr(st.session_state, "latest_return", 0) * 100
+            ),
+            "trading_volume": float(current_vol),
+            "macro_wti": float(latest_data_raw["WTI_유가"].iloc[0]),
+            "macro_exchange": float(latest_data_raw["환율"].iloc[0]),
+            "macro_eua": float(latest_data_raw["EUA"].iloc[0]),
+        }
+
+        if st.button("보고서 생성", type="primary", use_container_width=True):
+            with st.spinner(
+                "AI가 데이터를 분석하여 보고서를 작성하고 있습니다... (약 10~15초 소요)"
+            ):
+                from engine.llm_engine import LLMEngine
+
+                llm = LLMEngine()
+                report_data = llm.generate_report_text(context_data)
+
+                st.markdown("---")
+                st.markdown(f"### 2026년 4월 온실가스 배출권 매매계획(안)")
+                st.markdown("---")
+
+                st.markdown("#### Ⅰ. 배출권 시장현황")
+                st.markdown(
+                    f"**현재가:** {current_price:,.0f}원 | **최근 거래량:** {current_vol:,.0f}톤"
+                )
+                st.info(
+                    report_data.get(
+                        "market_trend", "시장 동향 텍스트 생성 중 오류가 발생했습니다."
+                    )
+                )
+
+                st.markdown("#### Ⅱ. 향후 전망 (AI 예측 기반)")
+                st.markdown(
+                    f"**AI 예측가 (단기):** {context_data['predicted_price']:,.0f}원 ({context_data['predicted_return_pct']:+.2f}%)"
+                )
+                st.success(
+                    report_data.get(
+                        "future_outlook", "전망 텍스트 생성 중 오류가 발생했습니다."
+                    )
+                )
+
+                st.markdown("#### Ⅲ. 배출권 확보계획(안)")
+                st.warning(
+                    report_data.get(
+                        "purchasing_strategy", "구매 전략 생성 중 오류가 발생했습니다."
+                    )
+                )

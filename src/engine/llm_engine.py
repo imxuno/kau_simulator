@@ -145,3 +145,49 @@ class LLMEngine:
         except Exception as e:
             logger.error(f"시나리오 분석 중 오류 발생: {e}")
             return {"error": f"분석 오류: {str(e)}"}
+
+    def generate_report_text(self, context_data: Dict[str, Any]) -> Dict[str, str]:
+        """주어진 시장 데이터(context_data)를 바탕으로 공문서 형태의 분석 텍스트를 생성"""
+        if not self.api_key or not self.json_model:
+            return {"error": "API Key missing"}
+
+        prompt = f"""
+        당신은 한국동서발전의 탄소배출권 전문 애널리스트입니다.
+        아래의 시장 데이터(XGBoost 예측값 및 현재 변수들)를 바탕으로 '월간 배출권 매매계획' 보고서의 텍스트 요약을 작성해주세요.
+
+        [현재 시장 데이터 스냅샷]
+        {json.dumps(context_data, ensure_ascii=False, indent=2)}
+
+        아래 JSON 형식에 맞춰서 내용을 반환해주세요. 문체는 반드시 '~함', '~예상됨', '~전망'과 같은 공문서 개조식(개요) 형태여야 합니다.
+
+        {{
+            "market_trend": "최근 배출권 시장의 가격 동향 및 거래량 요약 (2~3문장)",
+            "future_outlook": "AI 예측 모델(XGBoost)을 바탕으로 한 향후 가격 전망 (2~3문장)",
+            "purchasing_strategy": "현재 상황에 따른 구체적인 배출권 확보(매수/매도/관망) 전략 제안 (2~3문장)"
+        }}
+        """
+        try:
+            import re
+
+            response = self.json_model.generate_content(prompt)
+
+            json_match = re.search(
+                r"```(?:json)?\s*(.*?)\s*```", response.text, re.DOTALL
+            )
+            if json_match:
+                clean_text = json_match.group(1).strip()
+            else:
+                clean_text = response.text.strip()
+                start_idx = clean_text.find("{")
+                end_idx = clean_text.rfind("}")
+                if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                    clean_text = clean_text[start_idx : end_idx + 1]
+
+            return json.loads(clean_text)
+        except Exception as e:
+            logger.error(f"보고서 생성 실패: {e}")
+            return {
+                "market_trend": "시장 동향 텍스트 생성 실패",
+                "future_outlook": "향후 전망 텍스트 생성 실패",
+                "purchasing_strategy": "구매 전략 텍스트 생성 실패",
+            }
