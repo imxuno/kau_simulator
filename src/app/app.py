@@ -964,6 +964,28 @@ with main_col:
                     st.rerun()
             st.stop()
         else:
+            # -- LLM 적용 스위치 --
+            llm_toggle = False
+            llm_adj_rate = 0.0
+            original_next_day_pred = next_day_pred
+
+            if (
+                "llm_parsed_result" in st.session_state
+                and "error" not in st.session_state["llm_parsed_result"]
+            ):
+                llm_toggle = st.toggle("LLM 이벤트 시나리오 분석결과 반영", value=False)
+                st.markdown("</div>", unsafe_allow_html=True)
+
+                if llm_toggle:
+                    llm_adj_rate = float(
+                        st.session_state["llm_parsed_result"].get(
+                            "adjustment_rate", 0.0
+                        )
+                    )
+                    next_day_pred = next_day_pred * (1 + llm_adj_rate)
+                    required_budget = shortage * next_day_pred
+                    st.session_state["latest_return"] = llm_adj_rate
+
             # 1. 상단 6개의 KPI
             st.markdown("##### 주요지표")
             s_kpi1, s_kpi2, s_kpi3, s_kpi4, s_kpi5, s_kpi6 = st.columns(6)
@@ -1097,7 +1119,7 @@ with main_col:
 
             vol = current_price * 0.05
             base_pred_series = generate_random_walk(
-                current_price, next_day_pred, len(future_dates), vol, seed=42
+                current_price, original_next_day_pred, len(future_dates), vol, seed=42
             )
             up_pred_series = generate_random_walk(
                 current_price,
@@ -1129,10 +1151,22 @@ with main_col:
                 go.Scatter(
                     x=future_dates,
                     y=base_pred_series,
-                    name="기준 시나리오",
+                    name="기준 시나리오 (XGBoost)",
                     line=dict(color="#3b82f6"),
                 )
             )
+            if llm_toggle:
+                llm_pred_series = generate_random_walk(
+                    current_price, next_day_pred, len(future_dates), vol * 1.5, seed=45
+                )
+                fig_scenario.add_trace(
+                    go.Scatter(
+                        x=future_dates,
+                        y=llm_pred_series,
+                        name="LLM 이벤트 반영 시나리오 (After)",
+                        line=dict(color="#8b5cf6", width=3, dash="dash"),
+                    )
+                )
             fig_scenario.add_trace(
                 go.Scatter(
                     x=future_dates,
@@ -1168,8 +1202,11 @@ with main_col:
                 st.error(
                     f"**상승 시나리오**\n\n{next_day_pred * 1.15:,.0f} 원\n\n**{shortage * next_day_pred * 1.15 / 1e8:,.0f} 억원**"
                 )
+                scenario_title = (
+                    "**LLM 적용 시나리오**" if llm_toggle else "**기준 시나리오**"
+                )
                 st.info(
-                    f"**기준 시나리오**\n\n{next_day_pred:,.0f} 원\n\n**{required_budget / 1e8:,.0f} 억원**"
+                    f"{scenario_title}\n\n{next_day_pred:,.0f} 원\n\n**{required_budget / 1e8:,.0f} 억원**"
                 )
                 st.warning(
                     f"**하락 시나리오**\n\n{next_day_pred * 0.85:,.0f} 원\n\n**{shortage * next_day_pred * 0.85 / 1e8:,.0f} 억원**"
@@ -1274,6 +1311,7 @@ with main_col:
                                 vol * 1.5,
                                 seed=45,
                             )
+                        st.rerun()
                     except Exception as e:
                         st.error(f"실행 중 오류 발생: {str(e)}")
                         st.session_state.llm_parsed_result = {"error": str(e)}
@@ -1741,7 +1779,33 @@ with main_col:
                 "가동률": fig_op,
                 "LNG 전환 비율": fig_lng,
             }
-            st.plotly_chart(sens_map[sens_var], use_container_width=True)
+            selected_fig = sens_map[sens_var]
+            selected_fig.data[0].name = "기준 시나리오"
+            selected_fig.data[0].showlegend = True
+
+            if llm_toggle:
+                x_data = selected_fig.data[0].x
+                y_data = selected_fig.data[0].y
+                llm_y_data = [y * (1 + llm_adj_rate) for y in y_data]
+
+                selected_fig.add_trace(
+                    go.Scatter(
+                        x=x_data,
+                        y=llm_y_data,
+                        mode="lines+markers",
+                        name="LLM 반영 시나리오",
+                        line=dict(dash="dash", color="#8b5cf6"),
+                    )
+                )
+
+            selected_fig.update_layout(
+                showlegend=True,
+                legend=dict(
+                    orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0
+                ),
+            )
+
+            st.plotly_chart(selected_fig, use_container_width=True)
     # !SECTION - 가격 예측 시뮬레이터
 
     # ---------------------------------------------------------
@@ -1972,8 +2036,13 @@ with main_col:
             "현재 모델 예측치와 시장 데이터를 바탕으로 보고서를 자동 생성합니다."
         )
 
+        import datetime
+
+        current_date_str = datetime.datetime.now().strftime("%Y년 %m월")
+
         # Prepare context data
         context_data = {
+            "current_date_str": current_date_str,
             "current_date": test_end,
             "current_price": float(current_price),
             "predicted_price": float(
@@ -1993,37 +2062,58 @@ with main_col:
                 "AI가 데이터를 분석하여 보고서를 작성하고 있습니다... (약 10~15초 소요)"
             ):
                 from engine.llm_engine import LLMEngine
+                from engine.utils.pdf_generator import generate_pdf_report
 
                 llm = LLMEngine()
                 report_data = llm.generate_report_text(context_data)
 
-                st.markdown("---")
-                st.markdown(f"### 2026년 4월 온실가스 배출권 매매계획(안)")
-                st.markdown("---")
-
-                st.markdown("#### Ⅰ. 배출권 시장현황")
-                st.markdown(
-                    f"**현재가:** {current_price:,.0f}원 | **최근 거래량:** {current_vol:,.0f}톤"
-                )
-                st.info(
-                    report_data.get(
-                        "market_trend", "시장 동향 텍스트 생성 중 오류가 발생했습니다."
-                    )
+                # 생성된 데이터와 PDF를 session_state에 저장
+                st.session_state["report_data"] = report_data
+                st.session_state["pdf_bytes"] = generate_pdf_report(
+                    context_data, report_data
                 )
 
-                st.markdown("#### Ⅱ. 향후 전망 (AI 예측 기반)")
-                st.markdown(
-                    f"**AI 예측가 (단기):** {context_data['predicted_price']:,.0f}원 ({context_data['predicted_return_pct']:+.2f}%)"
-                )
-                st.success(
-                    report_data.get(
-                        "future_outlook", "전망 텍스트 생성 중 오류가 발생했습니다."
-                    )
-                )
+        # session_state에 보고서 데이터가 있으면 렌더링
+        if "report_data" in st.session_state:
+            report_data = st.session_state["report_data"]
 
-                st.markdown("#### Ⅲ. 배출권 확보계획(안)")
-                st.warning(
-                    report_data.get(
-                        "purchasing_strategy", "구매 전략 생성 중 오류가 발생했습니다."
-                    )
+            st.markdown("---")
+            st.markdown(f"### {current_date_str} 온실가스 배출권 매매계획(안)")
+            st.markdown("---")
+
+            st.markdown("#### Ⅰ. 배출권 시장현황")
+            st.markdown(
+                f"**현재가:** {current_price:,.0f}원 | **최근 거래량:** {current_vol:,.0f}톤"
+            )
+            st.info(
+                report_data.get(
+                    "market_trend", "시장 동향 텍스트 생성 중 오류가 발생했습니다."
+                )
+            )
+
+            st.markdown("#### Ⅱ. 향후 전망 (AI 예측 기반)")
+            st.markdown(
+                f"**AI 예측가 (단기):** {context_data['predicted_price']:,.0f}원 ({context_data['predicted_return_pct']:+.2f}%)"
+            )
+            st.success(
+                report_data.get(
+                    "future_outlook", "전망 텍스트 생성 중 오류가 발생했습니다."
+                )
+            )
+
+            st.markdown("#### Ⅲ. 배출권 확보계획(안)")
+            st.warning(
+                report_data.get(
+                    "purchasing_strategy", "구매 전략 생성 중 오류가 발생했습니다."
+                )
+            )
+
+            if "pdf_bytes" in st.session_state and st.session_state["pdf_bytes"]:
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.download_button(
+                    label="📄 월간 보고서 PDF 다운로드",
+                    data=st.session_state["pdf_bytes"],
+                    file_name="월간_배출권_매매계획_보고서.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
                 )

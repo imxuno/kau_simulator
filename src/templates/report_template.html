@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        @page {
+            size: a4;
+            margin: 2cm;
+            @frame header {
+                -pdf-frame-content: header_content;
+                top: 1cm;
+                margin-left: 2cm;
+                margin-right: 2cm;
+                height: 1cm;
+            }
+            @frame footer {
+                -pdf-frame-content: footer_content;
+                bottom: 1cm;
+                margin-left: 2cm;
+                margin-right: 2cm;
+                height: 1cm;
+            }
+        }
+        @font-face {
+            font-family: 'NanumGothic';
+            src: url('./fonts/NanumGothic.ttf');
+        }
+        body {
+            font-family: 'NanumGothic', sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: #333;
+        }
+        h1, h2, h3 {
+            color: #1e3a8a;
+            border-bottom: 2px solid #1e3a8a;
+            padding-bottom: 5px;
+        }
+        .header {
+            text-align: right;
+            color: #666;
+            font-size: 9pt;
+        }
+        .footer {
+            text-align: center;
+            color: #666;
+            font-size: 9pt;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #cbd5e1;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f1f5f9;
+            font-weight: bold;
+        }
+        .text-box {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        .highlight {
+            font-weight: bold;
+            color: #0284c7;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="header_content" class="header">
+        월간 온실가스 배출권 매매계획(안)
+    </div>
+
+    <h1>{{ context.current_date_str }} 온실가스 배출권 매매계획(안)</h1>
+
+    <div class="section">
+        <h2>Ⅰ. 배출권 시장현황</h2>
+        <table>
+            <tr>
+                <th>현재가 (원)</th>
+                <th>최근 거래량 (톤)</th>
+                <th>주요 경제 지표 (환율 등)</th>
+            </tr>
+            <tr>
+                <td class="highlight">{{ "{:,.0f}".format(context.current_price) }}</td>
+                <td>{{ "{:,.0f}".format(context.trading_volume) }}</td>
+                <td>USD/KRW: 1,350</td>
+            </tr>
+        </table>
+        <div class="text-box">
+            {{ report.market_trend }}
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Ⅱ. 향후 전망 (AI 예측 기반)</h2>
+        <table>
+            <tr>
+                <th>AI 단기 예측가</th>
+                <th>예상 변동률</th>
+            </tr>
+            <tr>
+                <td class="highlight">{{ "{:,.0f}".format(context.predicted_price) }}원</td>
+                <td class="highlight">{{ "{:+.2f}".format(context.predicted_return_pct) }}%</td>
+            </tr>
+        </table>
+        <div class="text-box">
+            {{ report.future_outlook }}
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Ⅲ. 배출권 확보계획(안)</h2>
+        <div class="text-box">
+            {{ report.purchasing_strategy }}
+        </div>
+    </div>
+
+    <div id="footer_content" class="footer">
+        - KAU AI Simulator Report -
+    </div>
+
+</body>
+</html>

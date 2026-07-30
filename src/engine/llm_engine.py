@@ -178,10 +178,11 @@ class LLMEngine:
                 clean_text = json_match.group(1).strip()
             else:
                 clean_text = response.text.strip()
-                start_idx = clean_text.find("{")
-                end_idx = clean_text.rfind("}")
-                if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-                    clean_text = clean_text[start_idx : end_idx + 1]
+
+            start_idx = clean_text.find("{")
+            end_idx = clean_text.rfind("}")
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                clean_text = clean_text[start_idx : end_idx + 1]
 
             return json.loads(clean_text)
         except Exception as e:
