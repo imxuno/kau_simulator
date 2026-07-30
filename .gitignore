@@ -1,0 +1,36 @@
+# Environments
+.env
+.venv
+venv/
+ENV/
+
+# Project Specific & Secrets
+cookies.txt
+data/
+models/
+docs/
+markdown/
+preprocess/
+simulators/
+state.node_module
+state.md
+netlify_page.html
+ui
+
+# Python / Streamlit
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.streamlit/secrets.toml
+
+# JS / Node
+node_modules/
+package-lock.json
+
+# IDEs & OS
+.vscode/
+.idea/
+.DS_Store
+*.log

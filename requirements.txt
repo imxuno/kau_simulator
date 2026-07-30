@@ -1,0 +1,20 @@
+# 기본 라이브러리
+pandas
+numpy
+matplotlib
+# 데이터 전처리 및 모델링 라이브러리
+scikit-learn
+# XGBoost 라이브러리
+xgboost
+# 환율 데이터 수집 라이브러리 (야후)
+yfinance
+# 날씨 데이터 수집 라이브러리
+meteostat
+# 웹 애플리케이션 라이브러리
+streamlit
+watchdog
+python-dotenv
+google-generativeai
+shap
+requests
+plotly
