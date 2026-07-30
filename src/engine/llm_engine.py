@@ -120,20 +120,23 @@ class LLMEngine:
 
         try:
             import re
+
             response = self.json_model.generate_content(user_prompt)
-            
-            # 1. 마크다운 코드 블록(```json ... ```) 패턴 추출 시도
-            json_match = re.search(r"```(?:json)?\s*(.*?)\s*```", response.text, re.DOTALL)
+
+            # 마크다운 코드 블록(```json ... ```) 패턴 추출 시도
+            json_match = re.search(
+                r"```(?:json)?\s*(.*?)\s*```", response.text, re.DOTALL
+            )
             if json_match:
                 clean_text = json_match.group(1).strip()
             else:
                 clean_text = response.text.strip()
-                # 2. 마크다운이 없는 경우, 순수 JSON 괄호 부분만 추출 시도 (불필요한 안내 텍스트 우회)
+                # 마크다운이 없는 경우, 순수 JSON 괄호 부분만 추출 시도
                 start_idx = clean_text.find("{")
                 end_idx = clean_text.rfind("}")
                 if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-                    clean_text = clean_text[start_idx:end_idx+1]
-                
+                    clean_text = clean_text[start_idx : end_idx + 1]
+
             parsed_data = json.loads(clean_text)
             return parsed_data
         except json.JSONDecodeError as e:

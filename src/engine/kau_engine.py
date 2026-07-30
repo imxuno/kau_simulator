@@ -18,7 +18,7 @@ def load_and_prep_data():
 
     api_client = ExternalAPIClient()
 
-    # 1. KAU 가격
+    # KAU 가격
     today = datetime.now()
     begin_date_str = "20210101"  # 제 3차 계획기간 시작일
     end_date_str = today.strftime("%Y%m%d")  # 오늘
@@ -84,7 +84,7 @@ def load_and_prep_data():
     start_date_str = df["일자"].min().strftime("%Y-%m-%d")
     end_date_str = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
-    # 2. Yahoo Finance 데이터
+    # Yahoo Finance 데이터
     try:
 
         def fetch_and_prep_yf(ticker, start, end, col_name):
@@ -97,7 +97,7 @@ def load_and_prep_data():
                 res = data[["Close"]].rename(columns={"Close": col_name})
                 if res.index.tz is not None:
                     res.index = res.index.tz_localize(None)
-                res = res[~res.index.duplicated(keep='first')]
+                res = res[~res.index.duplicated(keep="first")]
                 return res
             return pd.DataFrame(columns=[col_name])
 
@@ -243,7 +243,7 @@ def load_and_prep_data():
         ]:
             ext_data[c] = 0.0
 
-    # 3. 공공데이터포털 SMP 실시간 캐싱 (하루치씩만 조회되므로 캐싱본과 조합)
+    # 공공데이터포털 SMP
     os.makedirs("data", exist_ok=True)
     smp_cache_path = "data/smp_api_cache.csv"
     try:
@@ -307,12 +307,10 @@ def load_and_prep_data():
                         )
                         if avg_smp > 0:
                             new_smp_rows.append({"기간": d, "SMP": avg_smp})
-                    time.sleep(
-                        1.0
-                    )  # 429 Rate Limit 방지용 딜레이 (0.3초 -> 1.0초로 증가)
+                    time.sleep(1.0)
                 except Exception as loop_e:
                     st.warning(f"⚠️ SMP API 연동 중단 (예외 발생): {loop_e}")
-                    break  # 에러 발생 시 현재까지 모은 것만 저장하고 루프 탈출
+                    break
             if new_smp_rows:
                 new_smp_df = pd.DataFrame(new_smp_rows).set_index("기간")
                 smp = pd.concat([smp, new_smp_df]).sort_index()
@@ -327,13 +325,13 @@ def load_and_prep_data():
     ext_data = ext_data[~ext_data.index.duplicated(keep="first")]
     df = pd.merge(df, ext_data, on="일자", how="left")
 
-    # 5. 월간 거시 지표 데이터 (BSI, 제조업 가동률)
+    # 월간 거시 지표 데이터 (BSI, 제조업 가동률)
     df["연월"] = df["일자"].dt.strftime("%Y-%m")
 
     start_month = start_date_str.replace("-", "")[:6]
     end_month = end_date_str.replace("-", "")[:6]
 
-    # 5-1. BSI (ECOS)
+    # BSI (ECOS)
     try:
         bsi_res = api_client.fetch_ecos_business_survey_bsi(
             start_month=start_month, end_month=end_month
@@ -353,7 +351,7 @@ def load_and_prep_data():
     except Exception:
         df["업황전망BSI"] = 75.0
 
-    # 5-2. 제조업 가동률 (KOSIS)
+    # 제조업 가동률 (KOSIS)
     try:
         mfg_res = api_client.fetch_kosis_manufacturing_index(start_month=start_month)
         if isinstance(mfg_res, list) and len(mfg_res) > 0:
@@ -380,7 +378,7 @@ def load_and_prep_data():
 
     df["에너지_도입단가"] = df["환율"] * df["WTI_유가"]
 
-    # 결측치 보정 (Daily & Monthly FFill)
+    # 결측치 보정
     cols_to_fill = [
         "환율",
         "WTI_유가",
@@ -409,7 +407,7 @@ def load_and_prep_data():
 
     df["정산기한_접근도"] = df["일자"].apply(get_days_to_compliance)
 
-    # 4. ECOS API - 기준금리 실시간 연동 (기존 3.50 하드코딩 대체)
+    # 기준금리
     try:
         ecos_res = api_client.fetch_ecos_base_rate(
             start_date=start_date_str.replace("-", "")[:6],
@@ -460,8 +458,6 @@ def load_and_prep_data():
         "lng_ratio",
         "RE_비중",
     ]
-    # 이전에는 여기서 ext_cols를 shift(1) 했으나, target이 이미 shift(-1) 되어 있으므로
-    # 당일 데이터를 사용해 익일 가격을 예측하는 것이 맞습니다. shift(1)을 제거하여 거래량 및 외부 변수가 하루씩 밀리는 현상 수정.
 
     return df.dropna()
 
@@ -513,7 +509,7 @@ def get_trained_model(df, X_cols, force_retrain=False):
     os.makedirs("models", exist_ok=True)
     model_path = "models/kau_xgboost_model.json"
 
-    # 최근 3개월 기준으로 학습/검증 분할 (Rolling Window)
+    # 최근 3개월 기준으로 학습/검증 분할
     split_date = df["일자"].max() - pd.DateOffset(months=3)
     train = df[df["일자"] <= split_date]
     test = df[df["일자"] > split_date]
@@ -527,7 +523,7 @@ def get_trained_model(df, X_cols, force_retrain=False):
     )
 
     if os.path.exists(model_path) and not force_retrain:
-        # 이미 모델이 존재하면 읽기 전용으로 로드 (앱 새로고침 시 중복 학습 방지)
+        # 이미 모델이 존재하면 읽기 전용으로 로드
         model.load_model(model_path)
     else:
         # 최초 실행 혹은 강제 전체 재학습
@@ -577,8 +573,6 @@ def incremental_train(model, new_df, X_cols):
 # SECTION - KAU 예측
 # ---------------------------------------------------------
 def predict_kau(model, current_price, input_data):
-    # X_cols로 지정된 특성만 필터링 (오류 방지)
-    # X_cols는 전역 변수나 상수로 접근할 수 없으므로, 모델의 feature_names_in_를 사용
     features = (
         model.feature_names_in_
         if hasattr(model, "feature_names_in_")
@@ -591,10 +585,8 @@ def predict_kau(model, current_price, input_data):
     AUCTION_PREMIUM = 400  # 5월 120만 톤 경매 (응찰률 1.8배) 선반영
     POLICY_PREMIUM = 200  # K-MSR 도입 대비 이월 목적 매수세 선반영
 
-    # AI 예측가에 프리미엄을 얹어 최종 타겟 가격 산출
     final_target_price = base_ai_price + AUCTION_PREMIUM + POLICY_PREMIUM
 
-    # 최종 가격과 변동률(보정된 최종 가격 기준) 반환
     final_return = (final_target_price - current_price) / current_price
 
     return final_target_price, final_return
@@ -604,7 +596,7 @@ def predict_kau(model, current_price, input_data):
 
 
 # ---------------------------------------------------------
-# SECTION - 시나리오 추천
+# SECTION - 시나리오
 # ---------------------------------------------------------
 def get_recommendation(today_price, predicted_price, ma_5):
     pct_change = (predicted_price - today_price) / today_price * 100
@@ -616,16 +608,14 @@ def get_recommendation(today_price, predicted_price, ma_5):
         return "⚪ 관망", "가격 변동 추세 미미"
 
 
-# !SECTION - 시나리오 추천
+# !SECTION - 시나리오
 
 
 # ---------------------------------------------------------
 # SECTION - 예상 배출량 계산
 # ---------------------------------------------------------
 def calculate_emissions(op_rate, lng_ratio):
-    """
-    발전소 가동률(%)과 LNG 사용 비율(%)을 받아 예상 탄소 배출량과 부족분을 계산
-    """
+    """발전소 가동률(%)과 LNG 사용 비율(%)을 받아 예상 탄소 배출량과 부족분을 계산"""
     MAX_GEN_MWH = 3000000  # 월 최대 발전 가능량 (예시)
     MONTHLY_ALLOWANCE = 1800000  # 월간 무상 할당량 (예시)
 
@@ -684,18 +674,15 @@ def evaluate_model(model, df, X_cols):
 # ---------------------------------------------------------
 def get_feature_contributions(model, input_df, X_cols):
     """
-    최신 데이터 샘플에 대한 SHAP 값을 계산하여 각 피처의 기여도 반환
-    LLM 프롬프트에 주입할 정량적 XAI 기반 데이터로 활용
+    각 피처 기여도 반환
+    LLM 프롬프트에 주입
     """
     try:
         import shap
 
-        # TreeExplainer 생성
         explainer = shap.TreeExplainer(model)
-        # 2D 배열 혹은 단일 행 DataFrame에 대한 SHAP 값 계산
         shap_values = explainer.shap_values(input_df[X_cols])
 
-        # shap_values가 2D 배열인 경우 (다수 샘플), 마지막 샘플(최신) 값만 가져옴
         if len(shap_values.shape) > 1:
             latest_shap = shap_values[-1]
         else:
@@ -705,13 +692,12 @@ def get_feature_contributions(model, input_df, X_cols):
         for i, col in enumerate(X_cols):
             contributions[col] = float(latest_shap[i])
 
-        # 기여도 크기(절대값) 기준으로 내림차순 정렬
+        # 기여도 크기 기준으로 내림차순 정렬
         sorted_contributions = dict(
             sorted(contributions.items(), key=lambda item: abs(item[1]), reverse=True)
         )
         return sorted_contributions
     except ImportError:
-        # shap 패키지가 없을 경우 Feature Importances를 대용으로 반환
         importances = model.feature_importances_
         contributions = {col: float(imp) for col, imp in zip(X_cols, importances)}
         return dict(

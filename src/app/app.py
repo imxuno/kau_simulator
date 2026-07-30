@@ -20,7 +20,7 @@ st.set_page_config(
 )
 # st.title("K-ETS AI Simulator")  # 메인 타이틀
 
-# 글로벌 폰트(Pretendard) 적용
+# 글로벌 스타일
 st.markdown(
     """
 <style>
@@ -444,7 +444,7 @@ with main_col:
 
     next_day_pred = next_day_pred * linear_adj_factor
 
-    # 과거 데이터(최근 11건)에 대한 예측 생성 (전역 사용)
+    # 예측 생성
     temp_hist = df.tail(11).copy()
     if len(temp_hist) > 0:
         hist_preds = model.predict(temp_hist[X_cols])
