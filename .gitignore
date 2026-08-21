@@ -34,3 +34,8 @@ package-lock.json
 .idea/
 .DS_Store
 *.log
+
+# markdown
+eval.state.md
+frontend.state.md
+test_apis.py
