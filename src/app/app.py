@@ -341,6 +341,58 @@ with main_col:
         render_sidebar_gauge("평균기온", "평균기온", "℃", "{:,.1f}")
         render_sidebar_gauge("제조업 가동률", "제조업가동률", "%", "{:,.1f}")
 
+        nav_col.markdown("##### 보고서 학습")
+        uploaded_files = nav_col.file_uploader(
+            "보고서 PDF 업로드",
+            type=["pdf"],
+            label_visibility="collapsed",
+            accept_multiple_files=True,
+        )
+        if nav_col.button("보고서 학습", use_container_width=True):
+            if uploaded_files:
+                with st.spinner("PDF에서 텍스트를 추출하여 학습 중입니다..."):
+                    try:
+                        import fitz  # PyMuPDF
+
+                        text = ""
+                        for file in uploaded_files:
+                            doc = fitz.open(stream=file.read(), filetype="pdf")
+                            text += f"\n\n--- [보고서: {file.name}] ---\n"
+                            for page in doc:
+                                text += page.get_text()
+
+                        # 여러 보고서 분량을 고려해 최대 15,000자로 제한
+                        st.session_state.learned_report_text = text[:15000]
+
+                        # 요약 기능 호출
+                        import importlib
+                        from engine import llm_engine as _llm_engine
+
+                        importlib.reload(_llm_engine)
+                        from engine.llm_engine import LLMEngine
+
+                        llm = LLMEngine(
+                            provider=st.session_state.get("llm_provider", "nemotron")
+                        )
+                        summary = llm.summarize_report_text(
+                            st.session_state.learned_report_text
+                        )
+                        st.session_state.learned_report_summary = summary
+
+                        nav_col.success(
+                            "학습 완료! 시뮬레이션 시 보고서 내용이 융합됩니다."
+                        )
+                    except Exception as e:
+                        nav_col.error(f"오류 발생: {str(e)}")
+            else:
+                nav_col.warning("먼저 PDF 파일을 업로드해주세요.")
+
+        if st.session_state.get("learned_report_summary"):
+            with nav_col.expander("📝 학습된 보고서 요약 보기"):
+                st.markdown(st.session_state.learned_report_summary)
+
+        nav_col.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
+
         def add_llm_tag():
             new_tag = st.session_state.new_llm_tag.strip()
             if new_tag and new_tag not in st.session_state.llm_tags:
@@ -350,6 +402,12 @@ with main_col:
             st.session_state.new_llm_tag = ""
 
         nav_col.markdown("##### LLM 이벤트 시나리오")
+
+        selected_llm_provider = nav_col.radio(
+            "사용할 AI 모델", ["Nemotron", "Gemini"], index=0, horizontal=True
+        )
+        st.session_state.llm_provider = selected_llm_provider.lower()
+
         nav_col.text_input(
             "새로운 이벤트 태그 추가 (엔터)",
             key="new_llm_tag",
@@ -1100,6 +1158,25 @@ with main_col:
         with st.container(border=True):
             st.markdown("##### 시나리오별 가격 전망 (원/tCO2e)")
 
+            # --- 필터 영역 ---
+            f_col1, f_col2, f_col3 = st.columns([6, 2, 2])
+            with f_col2:
+                sim_period_filter = st.radio(
+                    "시뮬레이터 기간 필터",
+                    ["1개월", "3개월", "전체"],
+                    horizontal=True,
+                    label_visibility="collapsed",
+                    key="sim_period_filter",
+                )
+            with f_col3:
+                sim_freq_filter = st.radio(
+                    "시뮬레이터 주기 필터",
+                    ["일별", "주별", "월별"],
+                    horizontal=True,
+                    label_visibility="collapsed",
+                    key="sim_freq_filter",
+                )
+
             sc_col1, sc_col2 = st.columns([7, 3])
 
             future_dates = pd.date_range(
@@ -1136,49 +1213,83 @@ with main_col:
                 seed=44,
             )
 
+            # 데이터프레임 구성 및 필터링
+            past_df = df[["일자", "종가"]].copy()
+
+            future_df = pd.DataFrame(
+                {
+                    "일자": future_dates,
+                    "base_pred": base_pred_series,
+                    "up_pred": up_pred_series,
+                    "down_pred": down_pred_series,
+                }
+            )
+
+            llm_pred_series_upper = None
+            if llm_toggle:
+                llm_pred_series_upper = st.session_state.get("llm_pred_series")
+                if llm_pred_series_upper is not None:
+                    future_df["llm_pred"] = llm_pred_series_upper
+
+            # 기간 필터
+            if sim_period_filter == "1개월":
+                past_df = past_df.tail(30)
+            elif sim_period_filter == "3개월":
+                past_df = past_df.tail(90)
+
+            # 주기 필터
+            if sim_freq_filter == "주별":
+                past_df = (
+                    past_df.resample("W-MON", on="일자")
+                    .agg({"종가": "last"})
+                    .reset_index()
+                )
+                future_df = future_df.resample("W-MON", on="일자").last().reset_index()
+            elif sim_freq_filter == "월별":
+                past_df = (
+                    past_df.resample("M", on="일자").agg({"종가": "last"}).reset_index()
+                )
+                future_df = future_df.resample("M", on="일자").last().reset_index()
+
             fig_scenario = go.Figure()
-            past_dates = df["일자"].tail(30)
-            past_prices = df["종가"].tail(30)
+
             fig_scenario.add_trace(
                 go.Scatter(
-                    x=past_dates,
-                    y=past_prices,
+                    x=past_df["일자"],
+                    y=past_df["종가"],
                     name="과거 가격",
                     line=dict(color="#cbd5e1"),
                 )
             )
             fig_scenario.add_trace(
                 go.Scatter(
-                    x=future_dates,
-                    y=base_pred_series,
+                    x=future_df["일자"],
+                    y=future_df["base_pred"],
                     name="기준 시나리오 (XGBoost)",
                     line=dict(color="#3b82f6"),
                 )
             )
-            if llm_toggle:
-                llm_pred_series = generate_random_walk(
-                    current_price, next_day_pred, len(future_dates), vol * 1.5, seed=45
-                )
+            if "llm_pred" in future_df.columns:
                 fig_scenario.add_trace(
                     go.Scatter(
-                        x=future_dates,
-                        y=llm_pred_series,
+                        x=future_df["일자"],
+                        y=future_df["llm_pred"],
                         name="LLM 이벤트 반영 시나리오 (After)",
                         line=dict(color="#8b5cf6", width=3, dash="dash"),
                     )
                 )
             fig_scenario.add_trace(
                 go.Scatter(
-                    x=future_dates,
-                    y=up_pred_series,
+                    x=future_df["일자"],
+                    y=future_df["up_pred"],
                     name="상승 시나리오",
                     line=dict(color="#ef4444"),
                 )
             )
             fig_scenario.add_trace(
                 go.Scatter(
-                    x=future_dates,
-                    y=down_pred_series,
+                    x=future_df["일자"],
+                    y=future_df["down_pred"],
                     name="하락 시나리오",
                     line=dict(color="#f59e0b"),
                 )
@@ -1271,9 +1382,15 @@ with main_col:
                     "LLM이 이벤트를 분석하고 JSON 수치 파라미터로 변환 중입니다..."
                 ):
                     try:
+                        import importlib
+                        from engine import llm_engine as _llm_engine
+
+                        importlib.reload(_llm_engine)
                         from engine.llm_engine import LLMEngine
 
-                        llm = LLMEngine()
+                        llm = LLMEngine(
+                            provider=st.session_state.get("llm_provider", "nemotron")
+                        )
 
                         external_factors = {}
                         for col in latest_data_raw.columns:
@@ -1295,22 +1412,51 @@ with main_col:
                             "External_Factors": external_factors,
                         }
 
+                        if (
+                            "learned_report_text" in st.session_state
+                            and st.session_state.learned_report_text
+                        ):
+                            context_snapshot["학습된_비정형_보고서_내용"] = (
+                                st.session_state.learned_report_text
+                            )
+
                         parsed_json = llm.parse_scenario(
                             event_text, int(next_day_pred), context_snapshot
                         )
 
                         st.session_state.llm_parsed_result = parsed_json
+                        st.session_state.llm_provider_name = getattr(
+                            llm, "provider_name", "Unknown Model"
+                        )
 
                         if "error" not in parsed_json:
                             adj_rate = float(parsed_json.get("adjustment_rate", 0.0))
-                            new_predicted_price = next_day_pred * (1 + adj_rate)
-                            st.session_state.llm_pred_series = generate_random_walk(
-                                current_price,
-                                new_predicted_price,
-                                len(future_dates),
-                                vol * 1.5,
-                                seed=45,
+                            new_predicted_price = original_next_day_pred * (
+                                1 + adj_rate
                             )
+                            trajectory = parsed_json.get("predicted_trajectory")
+                            if (
+                                trajectory
+                                and isinstance(trajectory, list)
+                                and len(trajectory) > 1
+                            ):
+                                if len(trajectory) == len(future_dates):
+                                    st.session_state.llm_pred_series = trajectory
+                                else:
+                                    import numpy as np
+
+                                    old_indices = np.linspace(0, 1, len(trajectory))
+                                    new_indices = np.linspace(0, 1, len(future_dates))
+                                    st.session_state.llm_pred_series = np.interp(
+                                        new_indices, old_indices, trajectory
+                                    ).tolist()
+                            else:
+                                st.session_state.llm_pred_series = generate_random_walk(
+                                    current_price,
+                                    new_predicted_price,
+                                    len(future_dates),
+                                    vol * 1.5,
+                                )
                         st.rerun()
                     except Exception as e:
                         st.error(f"실행 중 오류 발생: {str(e)}")
@@ -1319,8 +1465,12 @@ with main_col:
             if st.session_state.get("llm_parsed_result"):
                 with st.container(border=True):
                     st.markdown("##### LLM 시나리오 분석 결과")
+                    provider_info = st.session_state.get(
+                        "llm_provider_name", "Unknown Model"
+                    )
                     st.info(
-                        f"**적용된 이벤트 태그:** {st.session_state.get('llm_last_tags', '')}"
+                        f"**적용된 이벤트 태그:** {st.session_state.get('llm_last_tags', '')}  \n"
+                        f"**사용된 AI 모델:** {provider_info}"
                     )
 
                     parsed_json = st.session_state.llm_parsed_result
@@ -1357,7 +1507,7 @@ with main_col:
                                     f"**주요 영향 산업군:** {', '.join(sectors)}"
                                 )
 
-                        new_predicted_price = next_day_pred * (1 + adj_rate)
+                        new_predicted_price = original_next_day_pred * (1 + adj_rate)
                         st.success(
                             f"**이벤트 적용 시 새로운 AI 예측 단가:** {new_predicted_price:,.0f} 원"
                         )
@@ -2061,10 +2211,16 @@ with main_col:
             with st.spinner(
                 "AI가 데이터를 분석하여 보고서를 작성하고 있습니다... (약 10~15초 소요)"
             ):
+                import importlib
+                import engine.llm_engine
+
+                importlib.reload(engine.llm_engine)
                 from engine.llm_engine import LLMEngine
                 from engine.utils.pdf_generator import generate_pdf_report
 
-                llm = LLMEngine()
+                llm = LLMEngine(
+                    provider=st.session_state.get("llm_provider", "nemotron")
+                )
                 report_data = llm.generate_report_text(context_data)
 
                 # 생성된 데이터와 PDF를 session_state에 저장

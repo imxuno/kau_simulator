@@ -8,8 +8,6 @@ scikit-learn
 xgboost
 # 환율 데이터 수집 라이브러리 (야후)
 yfinance
-# 날씨 데이터 수집 라이브러리
-meteostat
 # 웹 애플리케이션 라이브러리
 streamlit
 watchdog
@@ -20,3 +18,5 @@ requests
 plotly
 Jinja2
 xhtml2pdf
+openai
+PyMuPDF

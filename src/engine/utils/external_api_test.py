@@ -10,24 +10,28 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+
 class ExternalAPITestClient:
     """
     각종 공공 데이터 API를 하루치(혹은 1개월치)만 테스트로 가져오는 클래스
     """
+
     def __init__(self):
         # API 키 로드
-        self.data_go_kr_key = os.environ.get("DATA_GO_KR_KEY", "")      # 공공 데이터 포털
-        self.ecos_key = os.environ.get("ECOS_KEY", "")                  # ECOS
-        self.kma_data_hub_key = os.environ.get("KMA_DATA_HUB_KEY", "")  # 기상청 API 허브
-        self.kosis_api_key = os.environ.get("KOSIS_API_KEY", "")        # KOSIS API
-        self.kepco_api_key = os.environ.get("KEPCO_DATA_API_KEY", "")   # 한전 API
+        self.data_go_kr_key = os.environ.get("DATA_GO_KR_KEY", "")  # 공공 데이터 포털
+        self.ecos_key = os.environ.get("ECOS_KEY", "")  # ECOS
+        self.kma_data_hub_key = os.environ.get(
+            "KMA_DATA_HUB_KEY", ""
+        )  # 기상청 API 허브
+        self.kosis_api_key = os.environ.get("KOSIS_API_KEY", "")  # KOSIS API
+        self.kepco_api_key = os.environ.get("KEPCO_DATA_API_KEY", "")  # 한전 API
 
         # 기본 타임아웃 등 세션 설정
         self.session = requests.Session()
         self.timeout = 30
 
         # 테스트용 기준 날짜 세팅 (데이터 존재가 보장되는 최근 과거 특정일 사용)
-        self.test_date = "20240502" # 2024년 5월 2일 (평일)
+        self.test_date = "20240502"  # 2024년 5월 2일 (평일)
         self.test_date_dash = "2024-05-02"
         self.test_month = "202405"
         self.test_year = "2023"
@@ -44,13 +48,16 @@ class ExternalAPITestClient:
                 "numOfRows": 10,
                 "resultType": "json",
                 "beginBasDt": self.test_date,
-                "endBasDt": self.test_date
+                "endBasDt": self.test_date,
             }
             response = self.session.get(url, params=params, timeout=self.timeout)
             try:
                 return response.json()
             except Exception:
-                return {"error": "JSON 파싱 실패. 원본 데이터", "raw_text": response.text}
+                return {
+                    "error": "JSON 파싱 실패. 원본 데이터",
+                    "raw_text": response.text,
+                }
         except Exception as e:
             return {"error": str(e)}
 
@@ -66,7 +73,7 @@ class ExternalAPITestClient:
                 "q2": "C211",
                 "q3": "CO2",
                 "q4": "석유류",
-                "q5": "프로판"
+                "q5": "프로판",
             }
             response = self.session.get(url, params=params, timeout=self.timeout)
             try:
@@ -83,7 +90,7 @@ class ExternalAPITestClient:
                 "serviceKey": self.data_go_kr_key,
                 "pageNo": 1,
                 "numOfRows": 10,
-                "dataType": "JSON"
+                "dataType": "JSON",
             }
             response = self.session.get(url, params=params, timeout=self.timeout)
             try:
@@ -102,7 +109,11 @@ class ExternalAPITestClient:
             }
             response = self.session.get(url, params=params, timeout=self.timeout)
             # XML 고정 반환이므로 JSON 변환 시도 대신 텍스트 자체를 반환
-            return {"status": "success", "dataType": "XML", "data": response.text[:1000]} # 너무 길 수 있으므로 1000자 제한
+            return {
+                "status": "success",
+                "dataType": "XML",
+                "data": response.text[:1000],
+            }  # 너무 길 수 있으므로 1000자 제한
         except Exception as e:
             return {"error": str(e)}
 
@@ -114,7 +125,7 @@ class ExternalAPITestClient:
                 "pageNo": 1,
                 "numOfRows": 10,
                 "dataType": "JSON",
-                "date": self.test_date
+                "date": self.test_date,
             }
             response = self.session.get(url, params=params, timeout=self.timeout)
             try:
@@ -132,7 +143,7 @@ class ExternalAPITestClient:
                 "pageNo": 1,
                 "numOfRows": 10,
                 "apiType": "JSON",
-                "date": self.test_date
+                "date": self.test_date,
             }
             response = self.session.get(url, params=params, timeout=self.timeout)
             try:
@@ -185,22 +196,43 @@ class ExternalAPITestClient:
 
     def fetch_yahoo_kospi(self) -> str:
         try:
-            data = yf.download("^KS200", start=self.test_date_dash, end=(datetime.strptime(self.test_date_dash, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d"))
+            data = yf.download(
+                "^KS200",
+                start=self.test_date_dash,
+                end=(
+                    datetime.strptime(self.test_date_dash, "%Y-%m-%d")
+                    + timedelta(days=1)
+                ).strftime("%Y-%m-%d"),
+            )
             return data.to_json()
         except Exception as e:
             return str(e)
 
     def fetch_yahoo_global_energy_prices(self) -> str:
         try:
-            tickers = ['MTF=F', 'TTF=F', 'BZ=F']
-            data = yf.download(tickers, start=self.test_date_dash, end=(datetime.strptime(self.test_date_dash, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d"))
+            tickers = ["MTF=F", "TTF=F", "BZ=F"]
+            data = yf.download(
+                tickers,
+                start=self.test_date_dash,
+                end=(
+                    datetime.strptime(self.test_date_dash, "%Y-%m-%d")
+                    + timedelta(days=1)
+                ).strftime("%Y-%m-%d"),
+            )
             return data.to_json()
         except Exception as e:
             return str(e)
 
     def fetch_yahoo_eua_price(self) -> str:
         try:
-            data = yf.download("KE=F", start=self.test_date_dash, end=(datetime.strptime(self.test_date_dash, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d"))
+            data = yf.download(
+                "KE=F",
+                start=self.test_date_dash,
+                end=(
+                    datetime.strptime(self.test_date_dash, "%Y-%m-%d")
+                    + timedelta(days=1)
+                ).strftime("%Y-%m-%d"),
+            )
             return data.to_json()
         except Exception as e:
             return str(e)
@@ -224,7 +256,7 @@ class ExternalAPITestClient:
                 "startPrdDe": self.test_month,
                 "endPrdDe": self.test_month,
                 "orgId": "101",
-                "tblId": "DT_1F02001"
+                "tblId": "DT_1F02001",
             }
             response = self.session.get(url, params=params, timeout=self.timeout)
             try:
@@ -248,7 +280,7 @@ class ExternalAPITestClient:
                 "startPrdDe": self.test_month,
                 "endPrdDe": self.test_month,
                 "orgId": "101",
-                "tblId": "DT_1F32001"
+                "tblId": "DT_1F32001",
             }
             response = self.session.get(url, params=params, timeout=self.timeout)
             try:
@@ -272,7 +304,7 @@ class ExternalAPITestClient:
                 "cityCd": "110",
                 "bizCd": "C",
                 "apiKey": self.kepco_api_key,
-                "returnType": "json"
+                "returnType": "json",
             }
             response = self.session.get(url, params=params, timeout=self.timeout)
             try:
@@ -293,9 +325,12 @@ class ExternalAPITestClient:
                 "authKey": self.kma_data_hub_key,
                 "tm1": f"{self.test_date}0000",
                 "tm2": f"{self.test_date}2359",
-                "help": "0"
+                "help": "0",
             }
             response = self.session.get(url, params=params, timeout=self.timeout)
-            return {"status": "success", "data": response.text[:500]} # 너무 길면 잘라서 리턴
+            return {
+                "status": "success",
+                "data": response.text[:500],
+            }  # 너무 길면 잘라서 리턴
         except Exception as e:
             return {"error": str(e)}

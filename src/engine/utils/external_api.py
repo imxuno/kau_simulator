@@ -166,6 +166,45 @@ class ExternalAPIClient:
             return {}
 
     """
+    NOTE: 공공 데이터 포털 - 한국전력거래소_전력수급예보조회
+    """
+
+    def fetch_power_supply_forecast_by_source(self) -> Dict[str, Any]:
+        try:
+            logger.info("fetch_power_supply_forecast_by_source 호출")
+            url = (
+                "https://openapi.kpx.or.kr/openapi/forecast1dMaxBaseDate/getForecast1dMaxBaseDate"
+                f"?serviceKey={self.data_go_kr_key}"
+            )
+            response = self.session.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            # XML 고정 반환이므로 JSON 변환 시도 대신 텍스트 자체를 반환
+            return {"status": "success", "dataType": "XML", "data": response.text}
+        except Exception as e:
+            logger.error(f"전력수급예보조회 데이터 수집 중 오류 발생: {e}")
+            return {}
+
+    # """
+    # NOTE: 공공 데이터 포털 - 한국전력거래소_전력수급예보조회
+    # """
+
+    # def fetch_power_supply_forecast_by_source(
+    #     self, page_no: int = 1, num_of_rows: int = 100
+    # ) -> Dict[str, Any]:
+    #     try:
+    #         logger.info("fetch_power_supply_forecast_by_source 호출")
+    #         url = "https://apis.data.go.kr/B552115/forecast1dMaxBaseDate/getForecast1DMaxBaseDate"
+    #         params = {
+    #             "serviceKey": self.data_go_kr_key,
+    #             "pageNo": page_no,
+    #             "numOfRows": num_of_rows,
+    #             "dataType": "json",
+    #         }
+    #     except Exception as e:
+    #         logger.error(f"계통한계가격 및 수요예측 데이터 수집 중 오류 발생: {e}")
+    #         return {}
+
+    """
     NOTE: 공공 데이터 포털 - 한국동서발전(주)_연료원별 일별 발전량 현황 정보
     """
 
